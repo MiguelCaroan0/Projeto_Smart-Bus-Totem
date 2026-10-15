@@ -598,11 +598,10 @@ function inicializarMapa() {
     maxBoundsViscosity: 0.85
   }).setView(usuarioCoordenadas, 13);
 
-  camadaTileAtual = L.tileLayer(TILE_LAYERS.dark, {
+  camadaTileAtual = L.tileLayer(TILE_LAYERS.satelite, {
     maxZoom: 19,
     minZoom: 10,
-    subdomains: 'abcd',
-    attribution: '© OpenStreetMap © CARTO'
+    attribution: 'Imagens © Esri, Maxar, Earthstar Geographics'
   }).addTo(mapaInstancia);
 
   marcadoresGrupo = L.layerGroup().addTo(mapaInstancia);

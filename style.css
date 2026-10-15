@@ -84,6 +84,7 @@ button {
   font-weight: 800;
   color: var(--sinal);
   letter-spacing: 1px;
+  font-size: 100px;
 }
 
 #tela-inicial h1 {

@@ -12,6 +12,30 @@ const SELO = `<div class="selo-demo">${esc(D.avisoDemonstracao)}</div>`;
 let cenario = 'normal';
 let numeroDigitado = '';
 
+// Estado da demonstração (saldo e extrato mudam com as recargas; fica salvo no navegador)
+const CHAVE_ESTADO = 'totem-demo-cartao';
+const estadoCartao = (() => {
+  try { const s = JSON.parse(localStorage.getItem(CHAVE_ESTADO)); if (s && typeof s.saldo === 'number' && Array.isArray(s.extrato)) return s; } catch (e) {}
+  return { saldo: D.cartao.saldo, extrato: D.extrato.map(m => ({ ...m })) };
+})();
+const salvarEstado = () => { try { localStorage.setItem(CHAVE_ESTADO, JSON.stringify(estadoCartao)); } catch (e) {} };
+function restaurarDemo() { estadoCartao.saldo = D.cartao.saldo; estadoCartao.extrato = D.extrato.map(m => ({ ...m })); salvarEstado(); }
+
+// Leitura NFC (Web NFC: Chrome no Android, em https). Cartões de transporte comuns podem não ser lidos pelo navegador.
+let nfcCtrl = null, nfcMsg = '';
+const nfcSuportado = () => 'NDEFReader' in window;
+async function lerNFC(aoLer, aoMsg) {
+  if (!nfcSuportado()) return aoMsg('Este navegador/dispositivo não oferece leitura NFC ao site (requer Chrome no Android, em https). Digite o número ou use a simulação.');
+  try {
+    nfcCtrl?.abort(); nfcCtrl = new AbortController();
+    const leitor = new NDEFReader();
+    await leitor.scan({ signal: nfcCtrl.signal });
+    aoMsg('📡 Aproxime o cartão do leitor...');
+    leitor.onreading = (ev) => { nfcCtrl.abort(); aoLer(ev.serialNumber); };
+    leitor.onreadingerror = () => aoMsg('Não foi possível ler o cartão. Aproxime novamente.');
+  } catch (err) { aoMsg(err.name === 'NotAllowedError' ? 'Permissão de NFC negada.' : 'Não foi possível iniciar o NFC neste dispositivo.'); }
+}
+
 // ---------- Componentes ----------
 function painelEstado(chave, voltarFn) {
   const e = D.estados[chave];
@@ -23,7 +47,7 @@ function painelEstado(chave, voltarFn) {
 
 function simulador() {
   return `<div class="sim"><span>Simulador (demonstração):</span>${D.cenarios.map(c =>
-    `<button class="chip ${c.id === cenario ? 'ativo' : ''}" data-cenario="${c.id}">${c.rotulo}</button>`).join('')}</div>`;
+    `<button class="chip ${c.id === cenario ? 'ativo' : ''}" data-cenario="${c.id}">${c.rotulo}</button>`).join('')}<button class="chip" data-acao="resetdemo">Restaurar saldo de demonstração</button></div>`;
 }
 
 // Fluxo: digitar número → validar → renderizar conteúdo
@@ -31,8 +55,11 @@ function telaIdentificar(el, titulo, aoValidar) {
   numeroDigitado = '';
   const desenhar = (msgEstado) => {
     el.innerHTML = `<div class="painel">${SELO}<h2>${titulo}</h2>
-      <p class="texto-info">Digite o número do cartão. ${esc(D.dicaNumeroCartao)}</p>
-      <div class="visor" id="visor" aria-live="polite">${esc(numeroDigitado) || '—'}</div>
+      <button class="btn-grande" data-acao="nfc">📡 Aproximar o cartão (NFC)</button>
+      <p class="nota" aria-live="polite">${esc(nfcMsg) || 'Aproxime o cartão do leitor ou digite o número abaixo. Demonstração: qualquer cartão lido é tratado como o cartão de exemplo.'}</p>
+      <button class="chip" data-acao="nfc-sim">Simular aproximação (demonstração)</button>
+      <p class="texto-info">Ou digite o número do cartão. ${esc(D.dicaNumeroCartao)}</p>
+      <div class="visor" aria-live="polite">${esc(numeroDigitado) || '—'}</div>
       <div class="teclado">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-k="${n}">${n}</button>`).join('')}
         <button class="aux" data-k="C">Limpar</button><button data-k="0">0</button><button class="aux" data-k="B">Apagar</button></div>
       <button class="btn-grande" data-acao="confirmar">Continuar</button>
@@ -45,9 +72,17 @@ function telaIdentificar(el, titulo, aoValidar) {
     if (b.dataset.k) {
       const k = b.dataset.k;
       numeroDigitado = k === 'C' ? '' : k === 'B' ? numeroDigitado.slice(0, -1) : (numeroDigitado + k).slice(0, 12);
-      $('visor').textContent = numeroDigitado || '—'; return;
+      el.querySelector('.visor').textContent = numeroDigitado || '—'; return;
     }
     if (b.dataset.acao === 'repetir') { numeroDigitado = ''; return desenhar(); }
+    if (b.dataset.acao === 'resetdemo') { restaurarDemo(); nfcMsg = 'Saldo e extrato de demonstração restaurados.'; return desenhar(); }
+    const aposLeitura = () => {
+      if (cenario === 'bloqueado') return desenhar('bloqueado');
+      if (cenario === 'nao-identificado') return desenhar('nao-identificado');
+      numeroDigitado = D.cartao.numero; el.onclick = null; aoValidar();
+    };
+    if (b.dataset.acao === 'nfc-sim') { nfcMsg = ''; return aposLeitura(); }
+    if (b.dataset.acao === 'nfc') { nfcMsg = ''; return lerNFC(aposLeitura, (m) => { nfcMsg = m; desenhar(); }); }
     if (b.dataset.acao === 'confirmar') {
       if (cenario === 'bloqueado') return desenhar('bloqueado');
       if (cenario === 'nao-identificado' || numeroDigitado !== D.cartao.numero) return desenhar('nao-identificado');
@@ -63,21 +98,21 @@ const rotuloCartao = () => `<div class="cartao-visual"><small>${esc(D.cartao.nom
 const MONTAR = {
   'tela-saldo'(el) {
     telaIdentificar(el, 'Consultar saldo', () => {
-      const passes = Math.floor(D.cartao.saldo / D.valorPasse);
+      const passes = Math.floor(estadoCartao.saldo / D.valorPasse);
       el.innerHTML = `<div class="painel">${SELO}<h2>Consultar saldo</h2>
         <div class="cartao-visual"><small>${esc(D.cartao.nome)} • ${esc(D.cartao.tipo)}</small>
         <strong>${esc(D.cartao.titular)}</strong><small>Nº ${esc(D.cartao.numero)} • ${esc(D.cartao.status)}</small>
-        <span class="saldo">${BRL(D.cartao.saldo)}</span>
-        <small>≈ ${passes} passes de ${BRL(D.valorPasse)} (valor do passe provisório)</small></div>
+        <span class="saldo">${BRL(estadoCartao.saldo)}</span>
+        <small>≈ ${passes} passes de ${BRL(D.valorPasse)} (tarifa urbana de Londrina)</small></div>
         <p class="nota">${esc(D.avisoDemonstracao)}. Valores, titular e datas são fictícios.</p></div>`;
     });
   },
   'tela-extrato'(el) {
     telaIdentificar(el, 'Consultar extrato', () => {
-      const ent = D.extrato.filter(m => m.valor > 0).reduce((s, m) => s + m.valor, 0);
-      const sai = D.extrato.filter(m => m.valor < 0).reduce((s, m) => s + m.valor, 0);
+      const ent = estadoCartao.extrato.filter(m => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+      const sai = estadoCartao.extrato.filter(m => m.valor < 0).reduce((s, m) => s + m.valor, 0);
       el.innerHTML = `<div class="painel">${SELO}<h2>Extrato</h2>${rotuloCartao()}
-        ${D.extrato.map(m => `<div class="linha-mov"><div><b>${m.tipo === 'recarga' ? '⬆ ' + esc(m.descricao) : '⬇ ' + esc(m.onibus)}</b>
+        ${estadoCartao.extrato.map(m => `<div class="linha-mov"><div><b>${m.tipo === 'recarga' ? '⬆ ' + esc(m.descricao) : '⬇ ' + esc(m.onibus)}</b>
           <small>${m.tipo === 'recarga' ? 'Recarga' : 'Utilização'} • ${esc(m.rotuloData)}</small></div>
           <span class="${m.valor > 0 ? 'pos' : 'neg'}">${m.valor > 0 ? '+' : '−'} ${BRL(Math.abs(m.valor))}</span></div>`).join('')}
         <div class="linha-mov"><b>Entradas / Saídas no período</b><span><span class="pos">${BRL(ent)}</span> / <span class="neg">${BRL(Math.abs(sai))}</span></span></div>
@@ -90,6 +125,7 @@ const MONTAR = {
       const desenhar = () => {
         const total = qtd * D.valorPasse;
         el.innerHTML = `<div class="painel">${SELO}<h2>Recarregar cartão</h2>${rotuloCartao()}
+          <div class="linha-mov"><b>Saldo atual</b><span class="pos">${BRL(estadoCartao.saldo)}</span></div>
           <h3>Quantos passes?</h3><div class="chips">${D.quantidadesPasses.map(q => `<button class="chip ${q === qtd ? 'ativo' : ''}" data-q="${q}">${q}</button>`).join('')}</div>
           <h3>Forma de pagamento</h3><div class="chips">${D.formasPagamento.map(f => `<button class="chip ${f.id === forma ? 'ativo' : ''}" data-f="${f.id}">${f.rotulo}</button>`).join('')}</div>
           <div class="linha-mov"><b>Total (${qtd} × ${BRL(D.valorPasse)})</b><span class="pos">${BRL(total)}</span></div>
@@ -102,9 +138,12 @@ const MONTAR = {
         if (b.dataset.q) { qtd = +b.dataset.q; desenhar(); }
         else if (b.dataset.f) { forma = b.dataset.f; desenhar(); }
         else if (b.dataset.acao === 'pagar') {
-          const nome = D.formasPagamento.find(f => f.id === forma).rotulo;
+          const nome = D.formasPagamento.find(f => f.id === forma).rotulo, total = qtd * D.valorPasse;
+          estadoCartao.saldo = Math.round((estadoCartao.saldo + total) * 100) / 100;
+          estadoCartao.extrato.unshift({ tipo: 'recarga', descricao: `Recarga de ${qtd} passes`, rotuloData: new Date().toLocaleDateString('pt-BR'), valor: total });
+          salvarEstado();
           el.innerHTML = `<div class="painel">${SELO}<div class="estado"><div class="ic">✓</div><div><h3>Simulação concluída</h3>
-            <p>Recarga de ${qtd} passes (${BRL(qtd * D.valorPasse)}) via ${esc(nome)}. Saldo simulado: ${BRL(D.cartao.saldo + qtd * D.valorPasse)}.</p></div></div>
+            <p>Recarga de ${qtd} passes (${BRL(total)}) via ${esc(nome)}. O valor foi adicionado ao saldo de demonstração. Novo saldo: <b>${BRL(estadoCartao.saldo)}</b>.</p></div></div>
             <p class="nota">${esc(D.avisoSimulacao)}</p></div>`;
           el.onclick = null;
         }
@@ -150,6 +189,23 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------- Transporte ----------
+// Informações verificadas em fontes públicas (Prefeitura de Londrina, Diário do Transporte, Bem Paraná)
+const DETALHES_TERMINAIS = {
+  444: 'Inaugurado em 1988, tem 2 pisos e 10 plataformas (3 no inferior e 7 no superior), com cerca de 50 pontos de embarque. É o principal fluxo de passageiros da cidade.',
+  432: 'Reconstruído pela Prefeitura: área ampliada de 1.724,50 m² para 3.488,35 m², com piso tátil, rampas, sanitários acessíveis, fraldário e bicicletário.',
+  436: 'Terminal reformado e entregue pela Prefeitura, no pacote de reforma de quatro terminais de Londrina.',
+  452: 'Terminal reformado e entregue pela Prefeitura, no pacote de reforma de quatro terminais de Londrina.',
+  440: 'Incluído no pacote de reforma de quatro terminais de Londrina (obras iniciadas em 2022).'
+};
+const INFO_SISTEMA = [
+  ['💰 Tarifa urbana de Londrina', 'R$ 6,25 (reajuste de 2026; antes R$ 5,75).'],
+  ['☎️ Atendimento ao cliente', '0800-400-7020, aplicativo MOV Londrina e postos de atendimento nos terminais de ônibus de Londrina.']
+];
+const OPERADORAS = [
+  ['TCGL', 'Transportes Coletivos Grande Londrina. Atua em Londrina desde 1958 e opera linhas urbanas da cidade.'],
+  ['Londrisul', 'Londrisul Transportes Coletivos. Opera linhas urbanas de Londrina junto com a TCGL.'],
+  ['TIL', 'TIL Transportes Coletivos. Atua no transporte urbano de Ibiporã e Cambé e em linhas metropolitanas, segundo a imprensa regional.']
+];
 function montarTransporte(el) {
   const terminais = LOCAIS_REGIAO.filter(l => l.categoria === 'terminal');
   const cont = {};
@@ -163,13 +219,16 @@ function montarTransporte(el) {
       <div class="chips">${['todas', 'Londrina', 'Cambé', 'Ibiporã'].map(c => `<button class="chip ${c === cidade ? 'ativo' : ''}" data-c="${c}">${c === 'todas' ? 'Todas' : c}</button>`).join('')}</div>
       <h3>Terminais (${ts.length})</h3><div class="lista-cards">${ts.map(t => `<div class="card-info"><b>${esc(t.nome)}</b>
         <span>${esc(t.cidade)} • ${esc(t.status)}</span><span>📍 ${t.endereco ? esc(t.endereco) : NI}</span>
+        ${DETALHES_TERMINAIS[t.id] ? `<span>ℹ️ ${esc(DETALHES_TERMINAIS[t.id])}</span>` : ''}
         <span>🕒 ${t.horario ? esc(t.horario) : NI}</span><span>📞 ${t.fone ? esc(t.fone) : NI}</span>
         <button data-mapa="${t.id}">Ver no mapa</button></div>`).join('')}</div>
+      <h3>Sistema de transporte</h3><div class="lista-cards">${INFO_SISTEMA.map(([t, v]) => `<div class="card-info"><b>${t}</b><span>${esc(v)}</span></div>`).join('')}</div>
+      <h3>Operadoras</h3><div class="lista-cards">${OPERADORAS.map(([t, v]) => `<div class="card-info"><b>🚌 ${t}</b><span>${esc(v)}</span></div>`).join('')}</div>
       <h3>Linhas que passam pelos pontos mapeados</h3>
       <input type="search" id="busca-linha" placeholder="Digite o número da linha (ex.: 217)" value="${esc(busca)}">
       <div class="chips">${ls.length ? ls.map(n => `<button class="chip ${busca === n ? 'ativo' : ''}" data-l="${n}">${n} <small>(${cont[n].length})</small></button>`).join('') : '<span class="nao-info">Nenhuma linha encontrada.</span>'}</div>
       ${cont[busca] ? `<div class="lista-cards">${cont[busca].map(p => `<div class="card-info"><b>${esc(p.nome)}</b><span>${esc(p.cidade)}</span><button data-mapa="${p.id}">Ver no mapa</button></div>`).join('')}</div>` : ''}
-      <p class="nota">Operadoras no escopo do projeto: TIL/TCR, TCGL, LondriSul e Viação Garcia. Horários e tempo de chegada em tempo real dependem de APIs oficiais (em integração).
+      <p class="nota">Tarifa, operadoras, atendimento e detalhes dos terminais vêm de fontes públicas (Prefeitura de Londrina e imprensa). Não encontrei uma operadora chamada “TCL”; a sigla do sistema de Londrina é TCGL. Cambé e Ibiporã ainda não têm dados oficiais confirmados. Horários e tempo de chegada em tempo real dependem de APIs oficiais (em integração).
       Os números de linha acima vêm das referências dos pontos no OpenStreetMap e não formam a lista oficial de linhas.</p></div>`;
     const inp = $('busca-linha');
     inp.oninput = () => { busca = inp.value.trim(); const p = inp.selectionStart; desenhar(); const n = $('busca-linha'); n.focus(); n.setSelectionRange(p, p); };
@@ -184,6 +243,18 @@ function montarTransporte(el) {
 }
 
 // ---------- Ajuda e acessibilidade ----------
+let btDispositivo = null, btMsg = '';
+async function btConectar() {
+  if (!navigator.bluetooth) { btMsg = 'Este navegador/dispositivo não oferece Bluetooth ao site. Use as configurações Bluetooth do sistema do totem.'; return; }
+  try {
+    btDispositivo = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ['battery_service'] });
+    btDispositivo.addEventListener('gattserverdisconnected', () => { btMsg = 'Dispositivo desconectado.'; const el = $('tela-ajuda'); if (telaAtual === 'tela-ajuda') montarAjuda(el); });
+    await btDispositivo.gatt.connect();
+    btMsg = `Conectado: ${btDispositivo.name || 'dispositivo sem nome'}.`;
+  } catch (err) { btDispositivo = null; btMsg = err.name === 'NotFoundError' ? 'Nenhum dispositivo selecionado.' : 'Não foi possível conectar. Tente novamente.'; }
+}
+function btDesconectar() { if (btDispositivo?.gatt?.connected) btDispositivo.gatt.disconnect(); btDispositivo = null; btMsg = 'Dispositivo desconectado.'; }
+
 function montarAjuda(el) {
   const grande = document.documentElement.classList.contains('texto-grande');
   const contraste = document.body.classList.contains('alto-contraste');
@@ -192,15 +263,23 @@ function montarAjuda(el) {
       <button class="chip ${grande ? 'ativo' : ''}" data-ac="texto">🔠 Letras maiores</button>
       <button class="chip ${contraste ? 'ativo' : ''}" data-ac="contraste">◐ Alto contraste</button>
       <button class="chip" data-ac="voz">🔊 Ler esta tela em voz alta</button></div>
+    <h3>Bluetooth</h3><div class="chips">
+      <button class="chip ${btDispositivo ? 'ativo' : ''}" data-ac="bt">🎧 ${btDispositivo ? 'Trocar dispositivo' : 'Conectar dispositivo Bluetooth'}</button>
+      ${btDispositivo ? '<button class="chip" data-ac="bt-off">Desconectar</button>' : ''}
+      <button class="chip" data-ac="bt-teste">🔊 Testar áudio</button></div>
+    <p class="nota" aria-live="polite">${esc(btMsg) || 'Conecte um fone ou aparelho auditivo para ouvir as instruções do totem. Se o seu fone não aparecer na lista, faça o pareamento nas configurações Bluetooth do sistema do totem e use “Testar áudio”.'}</p>
     <h3>Perguntas frequentes</h3>
     <details><summary>Como consulto meu saldo?</summary><p>Em Cartões → Consultar saldo, digite o número do cartão. Na versão com leitor, bastará aproximar o cartão.</p></details>
     <details><summary>Posso recarregar aqui?</summary><p>Ainda não. A recarga por Pix e cartão é etapa futura; hoje use os pontos credenciados nos terminais.</p></details>
     <details><summary>Perdi meu cartão. O que faço?</summary><p>Procure o posto presencial do terminal central para bloquear ou cancelar.</p></details>
     <details><summary>Como chego a um terminal ou ponto?</summary><p>Em Mapas e Rotas, escolha o local e escaneie o QR Code para abrir o trajeto no celular.</p></details>
     <details><summary>Meus dados estão seguros?</summary><p>Esta é uma demonstração com dados fictícios. Nenhum dado pessoal é coletado.</p></details>
-    <div class="area-reservada"><b>Atendimento presencial</b><p>Suporte disponível nos terminais centrais de Londrina, Cambé e Ibiporã. Telefone e horário de atendimento: ${NI}.</p></div></div>`;
+    <div class="area-reservada"><b>Atendimento presencial</b><p>Postos de atendimento nos terminais de ônibus. Serviço de Atendimento ao Cliente (Londrina): 0800-400-7020 e aplicativo MOV Londrina. Horário de atendimento: ${NI}.</p></div></div>`;
   el.onclick = (ev) => {
     const a = ev.target.closest('[data-ac]')?.dataset.ac; if (!a) return;
+    if (a === 'bt') { btConectar().then(() => montarAjuda(el)); return; }
+    if (a === 'bt-off') { btDesconectar(); return montarAjuda(el); }
+    if (a === 'bt-teste') { if ('speechSynthesis' in window) { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance('Teste de áudio do Smart Totem. Se você está ouvindo esta mensagem, o som está funcionando.'); u.lang = 'pt-BR'; speechSynthesis.speak(u); } return; }
     if (a === 'texto') document.documentElement.classList.toggle('texto-grande');
     if (a === 'contraste') document.body.classList.toggle('alto-contraste');
     if (a === 'voz' && 'speechSynthesis' in window) {
@@ -215,6 +294,7 @@ function montarAjuda(el) {
 const _mostrarTela = mostrarTela;
 mostrarTela = function (id) {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+  nfcCtrl?.abort(); nfcMsg = '';
   _mostrarTela(id);
   if (MONTAR[id]) MONTAR[id]($(id));
   reiniciarInatividade();
@@ -240,6 +320,10 @@ inicializarMapa = function () {
     mapaInstancia.removeLayer(marcadoresGrupo);
     marcadoresGrupo = L.markerClusterGroup({ maxClusterRadius: 45, showCoverageOnHover: false, disableClusteringAtZoom: 17 }).addTo(mapaInstancia);
   }
+  // Ruas e nomes de lugares sobre o satélite (Esri)
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+  L.tileLayer(ESRI + 'Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: .85 }).addTo(mapaInstancia);
+  L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }).addTo(mapaInstancia);
   const lista = $('lista-locais');
   const bp = document.createElement('button');
   bp.className = 'btn-proximo'; bp.textContent = '⭐ Terminal mais próximo de mim';

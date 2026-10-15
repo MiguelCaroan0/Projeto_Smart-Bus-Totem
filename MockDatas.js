@@ -30,15 +30,15 @@ const DADOS_MOCK = Object.freeze({
 
   // ----- Movimentações (valor positivo = entrada). Utilizações trazem o ônibus usado -----
   extrato: [
-    { tipo: 'utilizacao', onibus: 'Ônibus 4102', rotuloData: '06/10/2026', valor: -5.0 },
-    { tipo: 'utilizacao', onibus: 'Ônibus 3187', rotuloData: '03/10/2026', valor: -5.0 },
-    { tipo: 'utilizacao', onibus: 'Ônibus 4102', rotuloData: '27/09/2026', valor: -5.0 },
-    { tipo: 'recarga', descricao: 'Recarga de 6 passes', rotuloData: '30/09/2026', valor: 30.0 },
-    { tipo: 'recarga', descricao: 'Recarga de 5 passes', rotuloData: '19/09/2026', valor: 25.0 }
+    { tipo: 'utilizacao', onibus: 'Ônibus 4102', rotuloData: '06/10/2026', valor: -6.25 },
+    { tipo: 'utilizacao', onibus: 'Ônibus 3187', rotuloData: '03/10/2026', valor: -6.25 },
+    { tipo: 'utilizacao', onibus: 'Ônibus 4102', rotuloData: '27/09/2026', valor: -6.25 },
+    { tipo: 'recarga', descricao: 'Recarga de 6 passes', rotuloData: '30/09/2026', valor: 37.5 },
+    { tipo: 'recarga', descricao: 'Recarga de 5 passes', rotuloData: '19/09/2026', valor: 31.25 }
   ],
 
-  // ----- Recarga por passes: valor PROVISÓRIO de cada passe (trocar pelo oficial) -----
-  valorPasse: 5.0,
+  // ----- Recarga por passes: tarifa urbana de Londrina (R$ 6,25, reajuste 2026) -----
+  valorPasse: 6.25,
   quantidadesPasses: [1, 2, 5, 10, 20, 40],
 
   // ----- Formas de pagamento da recarga (apenas rótulos; nada é cobrado) -----

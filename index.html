@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Totem</title>
+  <!-- Leaflet CSS Oficial -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- TELA 1: Inicial -->
+  <section id="tela-inicial" class="tela ativa" tabindex="0" role="button" aria-label="Toque na tela para iniciar">
+    <p class="marca">Smart Totem</p>
+    <h1>Seja Bem-Vindo</h1>
+    <div class="toque-iniciar">
+      <p>Toque em qualquer lugar da tela para iniciar</p>
+    </div>
+  </section>
+
+  <!-- TELA 2: Menu Principal -->
+  <section id="menu-principal" class="tela">
+    <h2 tabindex="-1">Como podemos ajudar você hoje?</h2>
+    <div class="grade-opcoes">
+      <button type="button" class="cartao" data-abrir="tela-transporte">
+        <span class="icone" aria-hidden="true">🚌</span>
+        <span class="cartao-nome">Transporte</span>
+        <span class="cartao-desc">Horários, linhas e terminais</span>
+      </button>
+      <button type="button" class="cartao" data-abrir="tela-cartoes">
+        <span class="icone" aria-hidden="true">💳</span>
+        <span class="cartao-nome">Cartões</span>
+        <span class="cartao-desc">Saldo, extrato e recarga</span>
+      </button>
+      <button type="button" class="cartao" data-abrir="tela-mapas">
+        <span class="icone" aria-hidden="true">🗺️</span>
+        <span class="cartao-nome">Mapas e Rotas</span>
+        <span class="cartao-desc">Londrina, Cambé e Ibiporã</span>
+      </button>
+      <button type="button" class="cartao" data-abrir="tela-ajuda">
+        <span class="icone" aria-hidden="true">♿</span>
+        <span class="cartao-nome">Ajuda</span>
+        <span class="cartao-desc">Acessibilidade e suporte</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- TELA TRANSPORTE -->
+  <section id="tela-transporte" class="tela tela-rolavel"></section>
+
+  <!-- SEÇÃO CARTÕES -->
+  <section id="tela-cartoes" class="tela">
+    <h2 tabindex="-1">Cartões</h2>
+    <p class="texto-info">Escolha uma opção de atendimento para o seu cartão-transporte.</p>
+    <div class="grade-opcoes grade-tres">
+      <button type="button" class="cartao" data-funcionalidade="tela-saldo"><span class="cartao-nome">Consultar saldo</span></button>
+      <button type="button" class="cartao" data-funcionalidade="tela-extrato"><span class="cartao-nome">Consultar extrato</span></button>
+      <button type="button" class="cartao" data-funcionalidade="tela-recarga"><span class="cartao-nome">Recarregar cartão</span></button>
+      <button type="button" class="cartao" data-funcionalidade="tela-bloqueio"><span class="cartao-nome">Bloquear / Cancelar</span></button>
+      <button type="button" class="cartao" data-funcionalidade="tela-carregamento"><span class="cartao-nome">Como carregar</span></button>
+      <button type="button" class="cartao" data-funcionalidade="tela-tipos-cartao"><span class="cartao-nome">Tipos de cartão</span></button>
+    </div>
+  </section>
+
+  <!-- SUBTELAS DE CARTÕES -->
+  <section id="tela-saldo" class="tela tela-rolavel"></section>
+  <section id="tela-extrato" class="tela tela-rolavel"></section>
+  <section id="tela-recarga" class="tela tela-rolavel"></section>
+  <section id="tela-bloqueio" class="tela tela-rolavel"></section>
+  <section id="tela-carregamento" class="tela tela-rolavel"></section>
+  <section id="tela-tipos-cartao" class="tela tela-rolavel"></section>
+
+  <!-- SEÇÃO MAPAS E ROTAS -->
+  <section id="tela-mapas" class="tela">
+    <div class="mapa-container">
+     
+      <!-- Painel Lateral -->
+      <aside class="mapa-painel">
+        <div class="painel-header">
+          <h2 tabindex="-1">Pontos de Ônibus e Terminais</h2>
+          <div class="busca-box">
+            <span class="busca-icone">🔍</span>
+            <input type="text" id="busca-local" placeholder="Buscar ponto de ônibus, terminal, rua..." autocomplete="off">
+            <button type="button" id="btn-limpar-busca" class="btn-limpar-busca oculta" aria-label="Limpar busca">✖</button>
+          </div>
+        </div>
+
+        <!-- Filtro por Cidade -->
+        <div class="mapa-cidades">
+          <button type="button" class="btn-cidade ativo" data-cidade="todas">Todas</button>
+          <button type="button" class="btn-cidade" data-cidade="Londrina">Londrina</button>
+          <button type="button" class="btn-cidade" data-cidade="Cambé">Cambé</button>
+          <button type="button" class="btn-cidade" data-cidade="Ibiporã">Ibiporã</button>
+        </div>
+
+        <!-- Filtro por Categoria (apenas pontos de ônibus) -->
+        <div class="mapa-filtros">
+          <button type="button" class="btn-filtro ativo" data-categoria="tudo">🚌 Todos os pontos <span id="qtd-tudo" class="contador-badge">0</span></button>
+          <button type="button" class="btn-filtro transporte" data-categoria="transporte">🚏 Paradas <span id="qtd-transporte" class="contador-badge">0</span></button>
+          <button type="button" class="btn-filtro terminal" data-categoria="terminal">🏢 Terminais <span id="qtd-terminal" class="contador-badge">0</span></button>
+        </div>
+
+        <div id="lista-locais" class="lista-locais"></div>
+
+        <!-- Card de Detalhes Glassmorphism -->
+        <div id="mapa-detalhes" class="mapa-detalhes oculta">
+          <button type="button" id="btn-fechar-detalhes" class="btn-fechar" aria-label="Fechar detalhes">✖</button>
+          <div class="detalhe-header">
+            <span id="detalhe-badge" class="badge-tipo">Tipo</span>
+            <span id="detalhe-distancia" class="badge-distancia">0.0 km</span>
+          </div>
+          <h3 id="detalhe-nome">Nome do Local</h3>
+         
+          <div class="estimativa-tempo">
+            <span>🚶 <strong id="detalhe-tempo-pe">-- min</strong> a pé</span>
+            <span>🚌 <strong id="detalhe-tempo-bus">-- min</strong> de ônibus</span>
+          </div>
+
+          <div class="detalhe-info-grid">
+            <p id="detalhe-endereco">📍 Endereço</p>
+            <p id="detalhe-horario">🕒 Horário</p>
+            <p id="detalhe-fone">📞 Telefone</p>
+          </div>
+
+          <div class="qr-box">
+            <div class="qr-textos">
+              <strong>📱 Rota no seu Celular</strong>
+              <span>Escaneie para iniciar o GPS</span>
+            </div>
+            <img id="detalhe-qr" src="" alt="QR Code da Rota" />
+          </div>
+        </div>
+      </aside>
+
+      <!-- Área do Mapa -->
+      <div class="mapa-wrapper">
+        <div id="mapa-canvas"></div>
+       
+        <!-- Alternador de Estilo do Mapa -->
+        <div class="mapa-camadas">
+          <button type="button" class="btn-camada ativo" data-camada="dark" title="Modo Escuro">🌙 Escuro</button>
+          <button type="button" class="btn-camada" data-camada="claro" title="Modo Claro">☀️ Claro</button>
+          <button type="button" class="btn-camada" data-camada="satelite" title="Modo Satélite">🛰️ Satélite</button>
+        </div>
+
+        <!-- Controles Touch Flutuantes -->
+        <div class="mapa-controles-touch">
+          <button type="button" id="btn-zoom-in" aria-label="Aumentar Zoom">＋</button>
+          <button type="button" id="btn-zoom-out" aria-label="Diminuir Zoom">－</button>
+          <button type="button" id="btn-recentralizar" title="Minha Localização">🎯</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- TELA AJUDA -->
+  <section id="tela-ajuda" class="tela tela-rolavel"></section>
+
+  <!-- Barra de Navegação -->
+  <nav id="barra-nav" class="barra-nav oculta">
+    <button type="button" id="botao-voltar" class="botao-nav botao-voltar">Voltar</button>
+    <button type="button" id="botao-cancelar" class="botao-nav botao-cancelar">Cancelar atendimento</button>
+  </nav>
+
+  <!-- Modal de Confirmação -->
+  <div id="confirmacao" class="fundo-modal oculta">
+    <div class="modal">
+      <h2>Deseja cancelar o atendimento?</h2>
+      <div class="modal-botoes">
+        <button type="button" id="botao-sim" class="botao-nav botao-cancelar">Sim, cancelar</button>
+        <button type="button" id="botao-nao" class="botao-nav botao-voltar">Não, continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts na ordem correta -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="MockDatas.js"></script>
+  <script src="script.js"></script>
+  <script src="extras.js"></script>
+</body>
+</html>
+
+
+ 
